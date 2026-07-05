@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surat Untukmu</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts: Montserrat (Modern Clean) & Handlee (Gaya tulisan tangan rapi, tegak, bukan huruf sambung) -->
+    <link href="https://fonts.googleapis.com/css2?family=Handlee&family=Montserrat:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background-color: #ffffff;
+            overflow-x: hidden;
+            height: 100vh;
+            margin: 0;
+            padding: 0;
+        }
+
+        /* Menggunakan font Handlee: tulisan tangan rapi, tegak, bukan huruf sambung */
+        .handwritten {
+            font-family: 'Handlee', cursive;
+        }
+
+        /* Canvas Background diletakkan di z-index tinggi agar kelopak tetap berjatuhan di depan kertas surat */
+        #ambient-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 45; /* Di atas kertas surat (z-index: 40) */
+        }
+
+        /* 3D Envelope Container */
+        .envelope-container {
+            perspective: 1000px;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 380px;
+            height: 260px;
+            cursor: pointer;
+            z-index: 30;
+            transition: transform 0.8s ease, opacity 0.8s ease;
+        }
+
+        @media (max-width: 480px) {
+            .envelope-container {
+                width: 290px;
+                height: 200px;
+            }
+        }
+
+        /* Envelope Inner */
+        .envelope {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            background-color: #fcfbf7;
+            border-radius: 0 0 10px 10px;
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.05), 0 5px 15px rgba(0, 0, 0, 0.03);
+            transition: transform 0.5s ease;
+        }
+
+        /* Front flap shapes */
+        .envelope-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: #eae7dc;
+            border-radius: 10px;
+        }
+
+        .flap {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 0;
+            height: 0;
+            border-left: 190px solid transparent;
+            border-right: 190px solid transparent;
+            border-top: 130px solid #d8d3c5;
+            transform-origin: top;
+            transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 4;
+        }
+
+        @media (max-width: 480px) {
+            .flap {
+                border-left: 145px solid transparent;
+                border-right: 145px solid transparent;
+                border-top: 100px solid #d8d3c5;
+            }
+        }
+
+        .pocket {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 0;
+            height: 0;
+            border-left: 190px solid #f3ece0;
+            border-right: 190px solid #f3ece0;
+            border-bottom: 130px solid #eae2d5;
+            border-radius: 0 0 10px 10px;
+            z-index: 3;
+        }
+
+        @media (max-width: 480px) {
+            .pocket {
+                border-left: 145px solid #f3ece0;
+                border-right: 145px solid #f3ece0;
+                border-bottom: 100px solid #eae2d5;
+            }
+        }
+
+        /* Wax Seal Button */
+        .wax-seal {
+            position: absolute;
+            top: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 50px;
+            height: 50px;
+            background-color: #b83b3b;
+            border-radius: 50%;
+            z-index: 5;
+            box-shadow: 0 4px 10px rgba(184, 59, 59, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.4s ease, background-color 0.4s ease;
+        }
+
+        .wax-seal::after {
+            content: '❤';
+            color: #fff;
+            font-size: 1.4rem;
+            display: block;
+        }
+
+        @media (max-width: 480px) {
+            .wax-seal {
+                top: 80px;
+                width: 40px;
+                height: 40px;
+            }
+            .wax-seal::after {
+                font-size: 1.1rem;
+            }
+        }
+
+        .wax-seal-pulse {
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            right: -5px;
+            bottom: -5px;
+            border: 2px solid rgba(184, 59, 59, 0.3);
+            border-radius: 50%;
+            animation: pulse-ring 1.8s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse-ring {
+            0% {
+                transform: scale(0.85);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(1.3);
+                opacity: 0;
+            }
+        }
+
+        /* Letter Sheet (inside the envelope originally) */
+        .letter-preview {
+            position: absolute;
+            top: 20px;
+            left: 15px;
+            right: 15px;
+            bottom: 10px;
+            background-color: #fffefb;
+            border: 1px solid #f2eedb;
+            border-radius: 4px;
+            z-index: 2;
+            transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateY(0);
+        }
+
+        /* Active opening sequence */
+        .envelope-container.open .flap {
+            transform: rotateX(180deg);
+            z-index: 1;
+        }
+
+        .envelope-container.open .letter-preview {
+            transform: translateY(-110%);
+            z-index: 5;
+        }
+
+        /* Full Screen Letter Overlay */
+        .full-letter-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.96);
+            z-index: 40;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1.2s ease;
+            overflow-y: auto;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 40px 20px;
+        }
+
+        .full-letter-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Kertas surat fisik */
+        .letter-paper {
+            background-color: #fffdf9;
+            width: 100%;
+            max-width: 650px;
+            border: 1px solid #f0e9d2;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.04);
+            border-radius: 8px;
+            padding: 50px 45px;
+            position: relative;
+            transform: translateY(50px);
+            transition: transform 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        @media (max-width: 480px) {
+            .letter-paper {
+                padding: 35px 25px;
+            }
+        }
+
+        .full-letter-overlay.active .letter-paper {
+            transform: translateY(0);
+        }
+
+        /* Polaroid Photo Frame Styling */
+        .polaroid-frame {
+            background: white;
+            padding: 14px 14px 30px 14px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06);
+            border: 1px solid #eaeaea;
+            transform: rotate(-1.5deg);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            max-width: 250px;
+            margin: 40px auto 10px auto;
+            cursor: zoom-in;
+        }
+
+        .polaroid-frame:hover {
+            transform: rotate(1deg) scale(1.03);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+        }
+
+        .polaroid-img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            border: 1px solid #eee;
+            background-color: #f7f7f7;
+        }
+
+        /* Pop-up Overlay untuk Zoom Foto */
+        #photo-popup {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.65); /* Redup latar belakang lembut */
+            z-index: 60; /* Harus di atas kertas surat dan partikel */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.4s ease;
+            cursor: zoom-out;
+        }
+
+        #photo-popup.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Konten Pop-up: Memperbesar sedikit (lebar 300px) dengan transisi mulus */
+        #popup-content {
+            background: white;
+            padding: 16px 16px 36px 16px; /* Padding sedikit disesuaikan dengan proporsi baru */
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+            border: 1px solid #eaeaea;
+            width: 300px; /* Ukuran diperbesar sedikit dari 250px */
+            transform: scale(0.9) rotate(-1.5deg);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.15);
+        }
+
+        #photo-popup.active #popup-content {
+            transform: scale(1.05) rotate(0deg); /* Diperbesar sedikit di tengah */
+        }
+
+        #popup-img {
+            width: 100%;
+            height: 240px; /* Tinggi disesuaikan secara proporsional */
+            object-fit: cover;
+            border: 1px solid #eee;
+            background-color: #f7f7f7;
+        }
+
+        /* Button Kembali ke Amplop */
+        .back-to-envelope {
+            position: fixed;
+            bottom: 25px;
+            right: 25px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border: 1px solid #e2e8f0;
+            padding: 8px 16px;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            z-index: 50; /* Di atas kelopak bunga */
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .back-to-envelope.show {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .back-to-envelope:hover {
+            background-color: #ffffff;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        /* Pulse Animation */
+        @keyframes gentle-pulse {
+            0%, 100% { transform: translate(-50%, -50%) scale(1); }
+            50% { transform: translate(-50%, -50%) scale(1.02); }
+        }
+
+        .pulse-active {
+            animation: gentle-pulse 3s ease-in-out infinite;
+        }
+    </style>
+</head>
+<body class="relative flex flex-col justify-between min-h-screen">
+
+    <!-- Audio Element (Musik Latar Sedih) -->
+    <!-- Prioritas memutar musik lokal bernama 'musik.mp3', jika tidak ada maka akan memakai link internet cadangan -->
+    <audio id="sad-bg-music" loop>
+        <source src="musik.mp3" type="audio/mpeg">
+        <source src="https://upload.wikimedia.org/wikipedia/commons/e/e5/Gymnopedie_No._1_%28Satie%29_-_Kevin_MacLeod.mp3" type="audio/mpeg">
+        Browser Anda tidak mendukung elemen musik latar.
+    </audio>
+
+    <!-- Floating Mute/Unmute Speaker Button -->
+    <button id="music-toggle" class="fixed top-4 right-4 z-50 bg-white/80 backdrop-blur-sm border border-neutral-200 w-10 h-10 rounded-full flex items-center justify-center shadow-sm cursor-pointer text-base transition-all hover:scale-105" onclick="toggleMusic(event)">
+        🔇
+    </button>
+
+    <!-- Canvas for Floating Falling Rose Petals (Z-index 45 memastikan tetap tampak saat surat terbuka) -->
+    <canvas id="ambient-canvas"></canvas>
+
+    <!-- Header background context -->
+    <header class="w-full text-center py-6 absolute top-0 z-20">
+        <span class="text-xs uppercase tracking-widest text-neutral-400 font-medium">Only For You Lia</span>
+    </header>
+
+    <!-- Interactive Envelope (Initial State) -->
+    <div id="envelope-wrapper" class="envelope-container pulse-active" onclick="openEnvelope()">
+        <div class="envelope">
+            <div class="envelope-back"></div>
+            <div class="flap" id="envelope-flap"></div>
+            <div class="letter-preview"></div>
+            <div class="pocket"></div>
+            <div class="wax-seal">
+                <div class="wax-seal-pulse"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scrollable Letter Overlay (Opened State) -->
+    <div id="letter-overlay" class="full-letter-overlay" onclick="closeLetterOnOuterClick(event)">
+        <div class="letter-paper my-8" id="letter-sheet" onclick="event.stopPropagation()">
+            <!-- Floral visual detail top -->
+            <div class="text-center text-rose-300 text-2xl mb-6">✦ ❦ ✦</div>
+            
+            <!-- Handwritten Content Area (Menggunakan Font Tegak Rapi Handlee, bukan huruf sambung) -->
+            <div class="handwritten text-2xl md:text-3xl text-neutral-800 leading-relaxed space-y-6 md:space-y-8">
+                
+                <p>
+                    Pertama-tama, selamat ya udah lewatin semua rintangan akademik ini, yang kamu dengan bekerja keras untuk menyelesaikannya, kamu sangat hebat bisa melakukannya sendiri.
+                </p>
+
+                <p>
+                    Kamu pernah bertanya kenapa aku ngomong seperti itu ke orang itu, aku tau rasanya benar-benar sakit dikhianati oleh sesorang, bahkan oleh orang yang kamu sayang, atau pernah sayang.
+                </p>
+
+                <p>
+                    Aku melakukan itu karena selama aku mau mendapatkan kamu kembali, dengan usaha berbulan-bulan tanpa dipandang menyesalku, kamu tidak pernah melihat penyesalanku saat terbilang putus di siang itu.
+                </p>
+
+                <p>
+                    Dan aku ngga punya teman bicara selain kamu, jadi aku mencoba minta saran dengannya, yang membuatku terbawa suasana jadi memberikan kata-kata buruk padamu, tapi tak pernah lupa aku gaungkan di chat itu, aku benar benar cinta padamu, tapi apa boleh buat, dia ngga jaga rahasia, dan seharusnya juga aku ngga ngomongin kamu dari belakang, dan aku pun berniat jujur untuk memberikan semua salinan chatnya agar kamu tahu apa saja yang aku bilang ke dia.
+                </p>
+
+                <p>
+                    Tapi tolong ngertiin aku kenapa aku sampe aku lakuin itu, aku juga ngerti kamu kenapa lakuin ini semua, kamu merasa sendirian, takut tak menentu, bingung, hampir tidak percaya padaku, aku ngga marah soal itu, seharusnya aku ngga ngomong gitu, maaf chat ku dengannya buat kamu sakit hati sampai sekarang.
+                </p>
+
+                <p>
+                    Tapi bukankah tidak adil, disaat kamu billing ribuan maaf, aku selalu meyakinkan kamu untuk tetap bersama, namun kamu disaat aku lepas kendali 1 kali kamu langsung meng iyakan itu, alasan aku bilang kita pisah, karena saat itu aku di desak terus olehmu sehingga aku lepas kendali, karena ada rasa tak dihargai karena mempertahankan kamu.
+                </p>
+
+                <p>
+                    Melihatmu sedih terus karena aku, aku bingung mau marah karena tidak dihargai, atau aku ikut sedih saat liat kamu selalu murung saat kita nonton di hari itu, aku juga banyak pikiran saat itu, maaf, aku jadi berbicara begitu disaat itu, seharusnya aku nenangin kamu.
+                </p>
+
+                <p>
+                    Padahal sebenarnya aku tidak pernah benar-benar mau ninggalin kamu, bisakah kamu melihat dari niatku, bukan cuma kata-kata?
+                </p>
+
+                <p>
+                    Tapi aku tau kenapa kamu begitu, karena kamu wanita hebat, harga dirimu tersakiti, karena kamu tau kamu sedang dalam keadaan sedih dan hampir tidak bisa apa-apa, sehingga kamu ambil keputusan untuk tetap dekat, tapi hati kita tak sedekat seperti dulu saat kita pacaran, aku benar-benar minta maaf membuatmu di dalam posisi itu, padahal diriku yang lain sangat mencintaimu, aku tidak tahu kenapa diriku yang satunya sangat marah padamu.
+                </p>
+
+                <p>
+                    Kini aku tahu kenapa dan diriku telah berdamai, amarah itu telah usai hilang ditelan sayangku padamu.
+                </p>
+
+                <p>
+                    Dan aku benar-benar minta maaf, bukan sekedar tulisan, tapi tulus, kuyakin selama ini kamu sudah lihat apa saja yang kulakukan untukmu demi dimaafkan.
+                </p>
+
+                <p>
+                    Karena yg aku lakukan ini adalah yang paling niat seumur hidupku.
+                </p>
+
+                <!-- Penutup (Mencintai Kamu di Tengah) -->
+                <div class="pt-8 text-center">
+                    <p class="text-3xl md:text-4xl text-rose-700 font-bold tracking-wide">Mencintai Kamu</p>
+                </div>
+
+                <!-- Custom Photo Frame Placeholder (Dapat diklik untuk Zoom) -->
+                <div class="pt-10">
+                    <div class="polaroid-frame" onclick="zoomPhoto(this)">
+                        <!-- File foto lokal bernama 'foto.jpg' yang bisa diunggah di GitHub -->
+                        <img 
+                            src="foto.jpg" 
+                            id="polaroid-image"
+                            class="polaroid-img" 
+                            alt="Foto Kenangan" 
+                            onerror="this.src='https://images.unsplash.com/photo-1518199266791-5375a83190b7?q=80&w=600&auto=format&fit=crop';"
+                        />
+                        <div class="text-center font-sans text-xs tracking-wider text-neutral-500 mt-3 uppercase">
+                            Our Story
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Decorative bottom footer inside paper -->
+            <div class="text-center text-rose-300 text-lg mt-8">❦</div>
+        </div>
+    </div>
+
+    <!-- Pop-up Overlay untuk Zoom Foto (Menutup ketika bagian layar mana saja diklik) -->
+    <div id="photo-popup" onclick="closeZoom()">
+        <div id="popup-content">
+            <img src="" id="popup-img" alt="Foto Kenangan Besar" />
+            <div class="text-center font-sans text-xs tracking-wider text-neutral-500 mt-3 uppercase">
+                Our Story
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Back Button (Let user easily close to appreciate the envelope again) -->
+    <button id="back-btn" class="back-to-envelope" onclick="closeLetter()">
+        ← I miss you Lia
+    </button>
+
+    <!-- Footer Copyright/Watermark -->
+    <footer class="w-full text-center py-4 text-[10px] text-neutral-300 font-medium z-10">
+        Dibuat oleh Rangga dengan segenap ketulusan hati.
+    </footer>
+
+    <!-- Interactive JS Scripts -->
+    <script>
+        const envelopeWrapper = document.getElementById('envelope-wrapper');
+        const letterOverlay = document.getElementById('letter-overlay');
+        const backBtn = document.getElementById('back-btn');
+        const bgMusic = document.getElementById('sad-bg-music');
+        const photoPopup = document.getElementById('photo-popup');
+        const popupImg = document.getElementById('popup-img');
+        const musicToggle = document.getElementById('music-toggle');
+
+        let isMusicPlaying = false;
+
+        // Fungsi memutar musik secara otomatis begitu amplop dibuka
+        function playMusic() {
+            if (!isMusicPlaying) {
+                bgMusic.play().then(() => {
+                    isMusicPlaying = true;
+                    musicToggle.innerHTML = '🔊';
+                }).catch(err => {
+                    console.log("Menunggu aksi pertama pada amplop untuk memulai lagu: ", err);
+                });
+            }
+        }
+
+        // Fungsi untuk mengaktifkan fitur Mute/Unmute tombol speaker tanpa mengganggu status amplop
+        function toggleMusic(e) {
+            e.stopPropagation(); // Mencegah terpicunya klik pada amplop jika tombol ditekan di awal
+            
+            if (!isMusicPlaying) {
+                // Jika user menekan tombol speaker sebelum membuka amplop, langsung putar musiknya
+                bgMusic.play().then(() => {
+                    isMusicPlaying = true;
+                    bgMusic.muted = false;
+                    musicToggle.innerHTML = '🔊';
+                }).catch(err => {
+                    console.log("Gagal memutar suara: ", err);
+                });
+                return;
+            }
+
+            // Atur Mute / Unmute jika musik sudah aktif berjalan
+            if (bgMusic.muted) {
+                bgMusic.muted = false;
+                musicToggle.innerHTML = '🔊';
+            } else {
+                bgMusic.muted = true;
+                musicToggle.innerHTML = '🔇';
+            }
+        }
+
+        // Fungsi memperbesar foto (Pop-up ke tengah layar dan perbesar sedikit)
+        function zoomPhoto(element) {
+            const imgSource = element.querySelector('.polaroid-img').src;
+            popupImg.src = imgSource;
+            photoPopup.classList.add('active');
+        }
+
+        // Fungsi menutup pembesaran foto (Zoom Out)
+        function closeZoom() {
+            photoPopup.classList.remove('active');
+        }
+
+        // Opening animation handling
+        function openEnvelope() {
+            // Putar lagu langsung saat klik tombol buka kertas (amplop)
+            playMusic();
+
+            // Sembunyikan animasi getar amplop
+            envelopeWrapper.classList.remove('pulse-active');
+            
+            // Animasi membuka flap amplop
+            envelopeWrapper.classList.add('open');
+
+            // Transisi halus memunculkan kertas surat
+            setTimeout(() => {
+                envelopeWrapper.style.transform = 'translate(-50%, -50%) scale(0.8)';
+                envelopeWrapper.style.opacity = '0';
+                
+                // Munculkan kertas surat
+                letterOverlay.classList.add('active');
+                backBtn.classList.add('show');
+            }, 1200);
+        }
+
+        // Closing animation handling
+        function closeLetter() {
+            letterOverlay.classList.remove('active');
+            backBtn.classList.remove('show');
+            
+            setTimeout(() => {
+                envelopeWrapper.classList.remove('open');
+                envelopeWrapper.style.transform = 'translate(-50%, -50%) scale(1)';
+                envelopeWrapper.style.opacity = '1';
+                envelopeWrapper.classList.add('pulse-active');
+            }, 600);
+        }
+
+        // Tutup surat jika area di luar kertas surat diklik
+        function closeLetterOnOuterClick(e) {
+            if (e.target === letterOverlay) {
+                closeLetter();
+            }
+        }
+
+        // ================= BACKGROUND ANIMATION (FALLING PETALS & HEARTS) =================
+        const canvas = document.getElementById('ambient-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let width = canvas.width = window.innerWidth;
+        let height = canvas.height = window.innerHeight;
+
+        window.addEventListener('resize', () => {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        });
+
+        // Petal generation setup
+        const petalCount = 35;
+        const petals = [];
+
+        class Petal {
+            constructor() {
+                this.reset();
+            }
+
+            reset() {
+                this.x = Math.random() * width;
+                this.y = Math.random() * -height - 20;
+                this.size = Math.random() * 8 + 6;
+                this.speedY = Math.random() * 1.2 + 0.8;
+                this.speedX = Math.random() * 1 - 0.5;
+                this.rotation = Math.random() * 360;
+                this.rotationSpeed = Math.random() * 1.5 - 0.75;
+                this.opacity = Math.random() * 0.4 + 0.3;
+                this.type = Math.random() > 0.4 ? 'petal' : 'heart';
+            }
+
+            update() {
+                this.y += this.speedY;
+                this.x += this.speedX;
+                this.rotation += this.rotationSpeed;
+
+                // Efek ayunan angin lembut
+                this.speedX += Math.sin(this.y * 0.01) * 0.01;
+
+                if (this.y > height + 20 || this.x < -20 || this.x > width + 20) {
+                    this.reset();
+                }
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.rotation * Math.PI / 180);
+                ctx.globalAlpha = this.opacity;
+
+                if (this.type === 'petal') {
+                    // Kelopak mawar pink halus
+                    ctx.fillStyle = 'rgba(244, 63, 94, 0.25)';
+                    ctx.beginPath();
+                    ctx.ellipse(0, 0, this.size, this.size / 1.6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Bentuk hati pink halus
+                    ctx.fillStyle = 'rgba(251, 113, 133, 0.2)';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 0);
+                    const s = this.size / 2;
+                    ctx.bezierCurveTo(-s/2, -s, -s, -s/2, 0, s);
+                    ctx.bezierCurveTo(s, -s/2, s/2, -s, 0, 0);
+                    ctx.fill();
+                }
+                ctx.restore();
+            }
+        }
+
+        // Inisialisasi kelopak
+        for (let i = 0; i < petalCount; i++) {
+            petals.push(new Petal());
+        }
+
+        // Loop animasi
+        function animate() {
+            ctx.clearRect(0, 0, width, height);
+
+            petals.forEach(petal => {
+                petal.update();
+                petal.draw();
+            });
+
+            requestAnimationFrame(animate);
+        }
+
+        // Interaksi kursor mouse melayangkan kelopak bunga
+        window.addEventListener('mousemove', (e) => {
+            textColors = petals.forEach(petal => {
+                const dx = petal.x - e.clientX;
+                const dy = petal.y - e.clientY;
+                const dist = Math.sqrt(dx*dx + dy*dy);
+                if (dist < 120) {
+                    petal.speedX += dx * 0.001;
+                    petal.speedY += dy * 0.001;
+                }
+            });
+        });
+
+        // Interaksi sentuhan layar HP
+        window.addEventListener('touchmove', (e) => {
+            if (e.touches.length > 0) {
+                const touch = e.touches[0];
+                petals.forEach(petal => {
+                    const dx = petal.x - touch.clientX;
+                    const dy = petal.y - touch.clientY;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist < 100) {
+                        petal.speedX += dx * 0.0015;
+                    }
+                });
+            }
+        });
+
+        // Jalankan seluruh animasi begitu jendela dimuat
+        window.onload = function() {
+            animate();
+        }
+    </script>
+</body>
+</html>
